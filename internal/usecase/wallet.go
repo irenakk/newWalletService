@@ -1,44 +1,101 @@
 package usecase
 
 import (
+	"errors"
 	"newWalletService/internal/model"
 	"newWalletService/internal/repository"
+	"strings"
 )
 
 type InterfaceWalletUsecase interface {
-	Create(userId int) (int, error)
-	FindByWalletId(id int) (model.Wallet, error)
-	FindByUserId(userId int) (model.Wallet, error)
+	Add(username string, currency string, amount int) (model.Account, error)
+	Transfer(username string, currency string, amount int) (model.Account, error)
 }
 
 type WalletUsecase struct {
-	walletRepository repository.InterfaceWalletRepository
+	userRepository    repository.InterfaceUserRepository
+	walletRepository  repository.InterfaceWalletRepository
+	accountRepository repository.InterfaceAccountRepository
 }
 
-func NewWalletUsecase(walletRepository repository.InterfaceWalletRepository) *WalletUsecase {
-	return &WalletUsecase{walletRepository}
+func NewWalletUsecase(userRepository repository.InterfaceUserRepository,
+	walletRepository repository.InterfaceWalletRepository,
+	accountRepository repository.InterfaceAccountRepository) *WalletUsecase {
+	return &WalletUsecase{userRepository, walletRepository, accountRepository}
 }
 
-func (usecase WalletUsecase) Create(userId int) (int, error) {
-	id, err := usecase.walletRepository.Create(userId)
+func (usecase WalletUsecase) Add(username string, currency string, amount int) (model.Account, error) {
+	user, err := usecase.userRepository.Find(username)
 	if err != nil {
-		return 0, err
+		return model.Account{}, err
 	}
-	return id, nil
+
+	walletId, err := usecase.walletRepository.FindByUserId(user.ID)
+	if err != nil {
+		return model.Account{}, err
+	}
+
+	if strings.ToUpper(currency) == "USD" || strings.ToUpper(currency) == "EUR" || strings.ToUpper(currency) == "RUB" {
+		accountId, err := usecase.accountRepository.FindByWalletCurrency(walletId, strings.ToUpper(currency))
+		if err != nil {
+			return model.Account{}, err
+		}
+
+		account, err := usecase.accountRepository.Add(accountId, amount)
+		if err != nil {
+			return model.Account{}, err
+		}
+
+		return account, nil
+	}
+
+	return model.Account{}, errors.New("invalid currency")
 }
 
-func (usecase WalletUsecase) FindByWalletId(id int) (model.Wallet, error) {
-	wallet, err := usecase.walletRepository.FindByWalletId(id)
+func (usecase WalletUsecase) Transfer(usernameFrom string, usernameTo string, currency string, amount int) (model.Account, error) {
+	userFrom, err := usecase.userRepository.Find(usernameFrom)
 	if err != nil {
-		return model.Wallet{}, err
+		return model.Account{}, err
 	}
-	return wallet, nil
-}
 
-func (usecase WalletUsecase) FindByUserId(userId int) (model.Wallet, error) {
-	wallet, err := usecase.walletRepository.FindByUserId(userId)
+	walletIdFrom, err := usecase.walletRepository.FindByUserId(userFrom.ID)
 	if err != nil {
-		return model.Wallet{}, err
+		return model.Account{}, err
 	}
-	return wallet, nil
+
+	userTo, err := usecase.userRepository.Find(usernameTo)
+	if err != nil {
+		return model.Account{}, err
+	}
+
+	walletIdTo, err := usecase.walletRepository.FindByUserId(userTo.ID)
+	if err != nil {
+		return model.Account{}, err
+	}
+
+	if strings.ToUpper(currency) == "USD" || strings.ToUpper(currency) == "EUR" || strings.ToUpper(currency) == "RUB" {
+		accountIdTo, err := usecase.accountRepository.FindByWalletCurrency(walletIdTo, strings.ToUpper(currency))
+		if err != nil {
+			return model.Account{}, err
+		}
+
+		_, err = usecase.accountRepository.Add(accountIdTo, amount)
+		if err != nil {
+			return model.Account{}, err
+		}
+
+		accountIdFrom, err := usecase.accountRepository.FindByWalletCurrency(walletIdFrom, strings.ToUpper(currency))
+		if err != nil {
+			return model.Account{}, err
+		}
+
+		accountFrom, err := usecase.accountRepository.Subtraction(accountIdFrom, amount)
+		if err != nil {
+			return model.Account{}, err
+		}
+
+		return accountFrom, nil
+	}
+
+	return model.Account{}, errors.New("invalid currency")
 }

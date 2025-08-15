@@ -2,13 +2,11 @@ package repository
 
 import (
 	"newWalletService/config"
-	"newWalletService/internal/model"
 )
 
 type InterfaceWalletRepository interface {
 	Create(userId int) (int, error)
-	FindByWalletId(id int) (model.Wallet, error)
-	FindByUserId(userId int) (model.Wallet, error)
+	FindByUserId(userId int) (int, error)
 }
 
 type WalletRepository struct {
@@ -28,20 +26,11 @@ func (r *WalletRepository) Create(userId int) (int, error) {
 	return id, nil
 }
 
-func (r *WalletRepository) FindByWalletId(id int) (model.Wallet, error) {
-	var wallet model.Wallet
-	err := r.db.DB.QueryRow(`SELECT id, user_id FROM wallets WHERE id = $1`, id).Scan(&wallet.ID, &wallet.UserId)
+func (r *WalletRepository) FindByUserId(userId int) (int, error) {
+	var id int
+	err := r.db.DB.QueryRow(`SELECT id FROM wallet WHERE user_id = $1`, userId).Scan(&id)
 	if err != nil {
-		return model.Wallet{}, err
+		return 0, err
 	}
-	return wallet, nil
-}
-
-func (r *WalletRepository) FindByUserId(userId int) (model.Wallet, error) {
-	var wallet model.Wallet
-	err := r.db.DB.QueryRow(`SELECT id, user_id FROM wallets WHERE user_id = $1`, userId).Scan(&wallet.ID, &wallet.UserId)
-	if err != nil {
-		return model.Wallet{}, err
-	}
-	return wallet, nil
+	return id, nil
 }

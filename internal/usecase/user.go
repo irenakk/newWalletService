@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"github.com/golang-jwt/jwt/v5"
+	"newWalletService/internal/dto"
 	"newWalletService/internal/model"
 	"newWalletService/internal/repository"
 	"newWalletService/internal/utils"
@@ -9,7 +10,7 @@ import (
 )
 
 type InterfaceUserUsecase interface {
-	Create(user model.UserRegister) (int, error)
+	Create(user dto.UserRegister) (int, error)
 	Find(username string) (model.User, error)
 	Exists(username string) (bool, error)
 	CheckPassword(loginPassword string, userPassword string) bool
@@ -28,13 +29,13 @@ func NewUserUsecase(userRepository repository.InterfaceUserRepository,
 	return &UserUsecase{userRepository, walletRepository, accountRepository}
 }
 
-func (usecase UserUsecase) Create(user model.UserRegister) (int, error) {
+func (usecase UserUsecase) Create(user dto.UserRegister) (int, error) {
 	hashedPassword, err := utils.HashPassword(user.Password)
 	if err != nil {
 		return 0, err
 	}
 
-	u := model.UserRegister{
+	u := dto.UserRegister{
 		Username: user.Username,
 		Password: hashedPassword,
 	}
@@ -44,11 +45,13 @@ func (usecase UserUsecase) Create(user model.UserRegister) (int, error) {
 		return 0, err
 	}
 
+	// create wallet
 	walletId, walletErr := usecase.walletRepository.Create(id)
 	if walletErr != nil {
 		return 0, walletErr
 	}
 
+	// create accounts
 	_, accountUsdError := usecase.accountRepository.Create("USD", walletId)
 	if accountUsdError != nil {
 		return 0, walletErr

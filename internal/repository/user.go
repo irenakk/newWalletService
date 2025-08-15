@@ -2,11 +2,12 @@ package repository
 
 import (
 	"newWalletService/config"
+	"newWalletService/internal/dto"
 	"newWalletService/internal/model"
 )
 
 type InterfaceUserRepository interface {
-	Create(user model.UserRegister) (int, error)
+	Create(user dto.UserRegister) (int, error)
 	Find(username string) (model.User, error)
 	Exists(username string) (bool, error)
 }
@@ -19,7 +20,7 @@ func NewUserRepository(db *config.Database) InterfaceUserRepository {
 	return &UserRepository{db}
 }
 
-func (r *UserRepository) Create(user model.UserRegister) (int, error) {
+func (r *UserRepository) Create(user dto.UserRegister) (int, error) {
 	var id int
 	err := r.db.DB.QueryRow(`INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id`,
 		user.Username, user.Password).Scan(&id)

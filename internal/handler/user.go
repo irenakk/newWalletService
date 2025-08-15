@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"net/http"
+	"newWalletService/internal/dto"
 	"newWalletService/internal/model"
 	"newWalletService/internal/usecase"
 	"time"
@@ -27,7 +28,7 @@ func NewAuthHandler(jwtSecret []byte, userUsecase *usecase.UserUsecase) *AuthHan
 
 // Register handles user registration
 func (h *AuthHandler) Register(c *gin.Context) {
-	var user model.UserRegister
+	var user dto.UserRegister
 
 	// Validate input JSON
 	if err := c.ShouldBindJSON(&user); err != nil {
@@ -45,11 +46,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	if exists {
-		c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
+		c.JSON(http.StatusConflict, gin.H{"error": "Username already registered"})
 		return
 	}
 
-	newUser := model.UserRegister{Username: user.Username, Password: user.Password}
+	newUser := dto.UserRegister{Username: user.Username, Password: user.Password}
 	username, err := h.userUsecase.Create(newUser)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "User creation failed"})
@@ -64,7 +65,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 // Login handles user authentication and JWT generation
 func (h *AuthHandler) Login(c *gin.Context) {
-	var login model.UserLogin
+	var login dto.UserLogin
 	if err := c.ShouldBindJSON(&login); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid login data"})
 		return

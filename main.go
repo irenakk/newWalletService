@@ -51,10 +51,13 @@ func main() {
 	userRepository := repository.NewUserRepository(db)
 	walletRepository := repository.NewWalletRepository(db)
 	accountRepository := repository.NewAccountRepository(db)
+
 	userUsecase := usecase.NewUserUsecase(userRepository, walletRepository, accountRepository)
+	walletUsecase := usecase.NewWalletUsecase(userRepository, walletRepository, accountRepository)
 
 	// Initialize handlers with JWT configuration
 	authHandler := handler.NewAuthHandler([]byte(cfg.JWT.Secret), userUsecase)
+	walletHandler := handler.NewWalletHandler(walletUsecase)
 
 	// Public routes
 	public := r.Group("/api/v1")
@@ -68,6 +71,8 @@ func main() {
 	protected.Use(middleware.AuthMiddleware([]byte(cfg.JWT.Secret)))
 	{
 		protected.GET("/hello", authHandler.Hello)
+		protected.POST("/add", walletHandler.Add)
+		protected.POST("/transfer", walletHandler.Transfer)
 	}
 
 	// Start server with configured host and port
