@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 	"log"
@@ -11,29 +10,12 @@ import (
 	"newWalletService/internal/handler"
 	"newWalletService/internal/middleware"
 	"newWalletService/internal/repository"
+	"newWalletService/internal/rpctransfer"
 	"newWalletService/internal/usecase"
-	pb "newWalletService/proto/wallet"
+	"newWalletService/proto/wallet"
 )
 
-type walletServer struct {
-	pb.UnimplementedWalletServiceServer
-	accounts map[string]*pb.Account
-}
-
-// Implement the GetMessage RPC
-func (s *walletServer) Add(c *gin.Context, req *pb.AddRequest) (*pb.AddResponse, error) {
-	message := fmt.Sprintf("Hello, %s!", req.Name)
-	return &pb.MessageResponse{Message: message}, nil
-}
-
 func main() {
-	lis, err := net.Listen("tcp", ":50051")
-	if err != nil {
-		log.Fatalf("Не удалось слушать порт: %v", err)
-	}
-
-	grpcServer := grpc.NewServer()
-	pb.RegisterUserServiceServer(grpcServer, &userServer{})
 
 	// Load configuration
 	cfg, err := config.Load()
@@ -101,5 +83,22 @@ func main() {
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal("Server failed to start:", err)
+	}
+
+	lis, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		panic(err)
+	}
+
+	grpcServer := grpc.NewServer()
+
+	h := &rpctransfer.Handlers{
+		Usecase: usecase.NewWalletUsecase(userRepository, walletRepository, accountRepository),
+	}
+
+	wallet.RegisterWalletServiceServer(grpcServer, h)
+
+	if err := grpcServer.Serve(lis); err != nil {
+		panic(err)
 	}
 }
