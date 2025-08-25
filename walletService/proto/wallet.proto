@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package wallet;
+
+option go_package = "newWalletService/proto/wallet;wallet";
+
+// gRPC сервис кошелька
+service WalletService {
+  // Пополнение кошелька
+  rpc Add (AddRequest) returns (AddResponse);
+
+  // Перевод между пользователями
+  rpc Transfer (TransferRequest) returns (TransferResponse);
+}
+
+// ==== Сообщения для Add ====
+
+message AddRequest {
+  string username = 1;  // имя пользователя, которому пополняем
+  string currency = 2;  // валюта (например "USD", "RUB")
+  double amount = 3;    // сумма пополнения
+}
+
+message AddResponse {
+  string message = 1;   // статус ("Amount successfully added")
+  Account account = 2;  // обновленный аккаунт
+}
+
+// ==== Сообщения для Transfer ====
+
+message TransferRequest {
+  string username_from = 1; // от кого перевод
+  string username = 2;      // кому перевод
+  string currency = 3;      // валюта перевода
+  double amount = 4;        // сумма перевода
+}
+
+message TransferResponse {
+  string message = 1;   // статус ("Amount successfully transferred")
+  Account account = 2;  // обновленный аккаунт отправителя
+}
+
+// ==== Модель аккаунта ====
+
+message Account {
+  int64 walletId = 1;    // id кошелька
+  string currency = 2;   // валюта счета
+  int64 balance = 3;     // баланс после операции
+}
