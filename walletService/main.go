@@ -3,6 +3,9 @@ package main
 import (
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+	"newWalletService/internal/repository/grpcclient"
+
 	"log"
 	"net"
 	"net/http"
@@ -12,11 +15,10 @@ import (
 	"newWalletService/internal/repository"
 	"newWalletService/internal/rpctransfer"
 	"newWalletService/internal/usecase"
-	"newWalletService/proto/wallet"
+	"newWalletService/proto"
 )
 
 func main() {
-
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -53,13 +55,22 @@ func main() {
 		c.Next()
 	})
 
-	userRepository := repository.NewUserRepository(db)
+	// ---- gRPC клиент к userService ----
+	conn, err := grpc.Dial("localhost:8080", grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("failed to connect to userService: %v", err)
+	}
+	defer conn.Close()
+
+	userClient := proto.NewUserServiceClient(conn)
+	userRepository := grpcclient.NewUserGrpcRepository(userClient)
+
+	// ---- локальные репозитории ----
 	walletRepository := repository.NewWalletRepository(db)
 	accountRepository := repository.NewAccountRepository(db)
 
+	// ---- usecase и handler ----
 	walletUsecase := usecase.NewWalletUsecase(userRepository, walletRepository, accountRepository)
-
-	// Initialize handlers with JWT configuration
 	walletHandler := handler.NewWalletHandler(walletUsecase)
 
 	// Protected routes with JWT middleware
@@ -70,35 +81,39 @@ func main() {
 		protected.POST("/transfer", walletHandler.Transfer)
 	}
 
-	// Start server with configured host and port
-	serverAddr := cfg.Server.Host + ":" + cfg.Server.Port
-	log.Printf("Server starting on %s", serverAddr)
-
+	// ---- HTTP server ----
+	httpAddr := cfg.Server.Host + ":" + cfg.Server.Port
+	log.Printf("Server starting on %s", httpAddr)
 	srv := &http.Server{
-		Addr:         serverAddr,
+		Addr:         httpAddr,
 		Handler:      r,
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 	}
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal("Server failed to start:", err)
-	}
+	go func() {
+		log.Printf("HTTP server starting on %s", httpAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server failed: %v", err)
+		}
+	}()
 
-	lis, err := net.Listen("tcp", ":8080")
+	// ---- gRPC server ----
+	grpcAddr := ":9091"
+	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to listen on %s: %v", grpcAddr, err)
 	}
 
 	grpcServer := grpc.NewServer()
-
 	h := &rpctransfer.Handlers{
 		Usecase: usecase.NewWalletUsecase(userRepository, walletRepository, accountRepository),
 	}
+	proto.RegisterWalletServiceServer(grpcServer, h)
+	reflection.Register(grpcServer)
 
-	wallet.RegisterWalletServiceServer(grpcServer, h)
-
+	log.Printf("gRPC server starting on %s", grpcAddr)
 	if err := grpcServer.Serve(lis); err != nil {
-		panic(err)
+		log.Fatalf("gRPC server failed: %v", err)
 	}
 }

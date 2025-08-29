@@ -6,6 +6,6 @@ import (
 )
 
 type Handlers struct {
-	Usecase *usecase.WalletUsecase
-	proto.UnimplementedWalletServiceServer
+	Usecase *usecase.UserUsecase
+	proto.UnimplementedUserServiceServer
 }

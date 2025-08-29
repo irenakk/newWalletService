@@ -2,24 +2,29 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 	"log"
+	"net"
 	"net/http"
-	config2 "newWalletService/config"
+	"newWalletService/config"
 	"newWalletService/internal/handler"
 	"newWalletService/internal/middleware"
 	"newWalletService/internal/repository"
+	"newWalletService/internal/rpctransfer"
 	"newWalletService/internal/usecase"
+	"newWalletService/proto"
 )
 
 func main() {
 	// Load configuration
-	cfg, err := config2.Load()
+	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("Failed to load config:", err)
 	}
 
 	// Initialize database
-	db, err := config2.NewDatabase(cfg.GetDSN())
+	db, err := config.NewDatabase(cfg.GetDSN())
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
@@ -49,15 +54,10 @@ func main() {
 	})
 
 	userRepository := repository.NewUserRepository(db)
-	walletRepository := repository.NewWalletRepository(db)
-	accountRepository := repository.NewAccountRepository(db)
 
-	userUsecase := usecase.NewUserUsecase(userRepository, walletRepository, accountRepository)
-	walletUsecase := usecase.NewWalletUsecase(userRepository, walletRepository, accountRepository)
+	userUsecase := usecase.NewUserUsecase(userRepository)
 
-	// Initialize handlers with JWT configuration
 	authHandler := handler.NewAuthHandler([]byte(cfg.JWT.Secret), userUsecase)
-	walletHandler := handler.NewWalletHandler(walletUsecase)
 
 	// Public routes
 	public := r.Group("/api/v1")
@@ -71,22 +71,41 @@ func main() {
 	protected.Use(middleware.AuthMiddleware([]byte(cfg.JWT.Secret)))
 	{
 		protected.GET("/hello", authHandler.Hello)
-		protected.POST("/add", walletHandler.Add)
-		protected.POST("/transfer", walletHandler.Transfer)
 	}
 
-	// Start server with configured host and port
-	serverAddr := cfg.Server.Host + ":" + cfg.Server.Port
-	log.Printf("Server starting on %s", serverAddr)
-
+	// ---- HTTP server ----
+	httpAddr := cfg.Server.Host + ":" + cfg.Server.Port
+	log.Printf("Server starting on %s", httpAddr)
 	srv := &http.Server{
-		Addr:         serverAddr,
+		Addr:         httpAddr,
 		Handler:      r,
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 	}
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal("Server failed to start:", err)
+	go func() {
+		log.Printf("HTTP server starting on %s", httpAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server failed: %v", err)
+		}
+	}()
+
+	// ---- gRPC server ----
+	grpcAddr := ":9090"
+	lis, err := net.Listen("tcp", grpcAddr)
+	if err != nil {
+		log.Fatalf("Failed to listen on %s: %v", grpcAddr, err)
+	}
+
+	grpcServer := grpc.NewServer()
+	h := &rpctransfer.Handlers{
+		Usecase: usecase.NewUserUsecase(userRepository),
+	}
+	proto.RegisterUserServiceServer(grpcServer, h)
+	reflection.Register(grpcServer)
+
+	log.Printf("gRPC server starting on %s", grpcAddr)
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("gRPC server failed: %v", err)
 	}
 }

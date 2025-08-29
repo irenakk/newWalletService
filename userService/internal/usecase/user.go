@@ -18,15 +18,11 @@ type InterfaceUserUsecase interface {
 }
 
 type UserUsecase struct {
-	userRepository    repository.InterfaceUserRepository
-	walletRepository  repository.InterfaceWalletRepository
-	accountRepository repository.InterfaceAccountRepository
+	userRepository repository.InterfaceUserRepository
 }
 
-func NewUserUsecase(userRepository repository.InterfaceUserRepository,
-	walletRepository repository.InterfaceWalletRepository,
-	accountRepository repository.InterfaceAccountRepository) *UserUsecase {
-	return &UserUsecase{userRepository, walletRepository, accountRepository}
+func NewUserUsecase(userRepository repository.InterfaceUserRepository) *UserUsecase {
+	return &UserUsecase{userRepository}
 }
 
 func (usecase UserUsecase) Create(user dto.UserRegister) (int, error) {
@@ -43,28 +39,6 @@ func (usecase UserUsecase) Create(user dto.UserRegister) (int, error) {
 	id, err := usecase.userRepository.Create(u)
 	if err != nil {
 		return 0, err
-	}
-
-	// create wallet
-	walletId, walletErr := usecase.walletRepository.Create(id)
-	if walletErr != nil {
-		return 0, walletErr
-	}
-
-	// create accounts
-	_, accountUsdError := usecase.accountRepository.Create("USD", walletId)
-	if accountUsdError != nil {
-		return 0, walletErr
-	}
-
-	_, accountEurError := usecase.accountRepository.Create("EUR", walletId)
-	if accountEurError != nil {
-		return 0, walletErr
-	}
-
-	_, accountRubError := usecase.accountRepository.Create("RUB", walletId)
-	if accountRubError != nil {
-		return 0, walletErr
 	}
 
 	return id, nil

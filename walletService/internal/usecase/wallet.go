@@ -8,6 +8,8 @@ import (
 )
 
 type InterfaceWalletUsecase interface {
+	CreateWallet(userId int) (int, error)
+	CreateAccount(walletId int, currency string) (int, error)
 	Add(username string, currency string, amount int) (model.Account, error)
 	Transfer(username string, currency string, amount int) (model.Account, error)
 }
@@ -22,6 +24,22 @@ func NewWalletUsecase(userRepository repository.InterfaceUserRepository,
 	walletRepository repository.InterfaceWalletRepository,
 	accountRepository repository.InterfaceAccountRepository) *WalletUsecase {
 	return &WalletUsecase{userRepository, walletRepository, accountRepository}
+}
+
+func (usecase WalletUsecase) CreateWallet(userId int) (int, error) {
+	id, err := usecase.walletRepository.Create(userId)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (usecase WalletUsecase) CreateAccount(walletId int, currency string) (int, error) {
+	id, err := usecase.accountRepository.Create(currency, walletId)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func (usecase WalletUsecase) Add(username string, currency string, amount int) (model.Account, error) {
