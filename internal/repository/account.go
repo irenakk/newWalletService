@@ -1,12 +1,14 @@
 package repository
 
 import (
+	"context"
 	"walletService/config"
 	"walletService/internal/model"
 )
 
 type InterfaceAccountRepository interface {
-	Create(currency string, walletId int) (int, error)
+	Create(ctx context.Context, currency string, walletId int) (int, error)
+	Delete(ctx context.Context, currency string, walletId int) (int, error)
 	FindByWalletCurrency(walletId int, currency string) (int, error)
 	Add(id int, amount int) (model.Account, error)
 	Subtraction(id int, amount int) (model.Account, error)
@@ -20,13 +22,35 @@ func NewAccountRepository(db *config.Database) InterfaceAccountRepository {
 	return &AccountRepository{db}
 }
 
-func (r *AccountRepository) Create(currency string, walletId int) (int, error) {
+func (r *AccountRepository) Create(ctx context.Context, currency string, walletId int) (int, error) {
 	var id int
-	err := r.db.DB.QueryRow(`INSERT INTO account (balance, currency, wallet_id) VALUES ($1, $2, $3) RETURNING id`,
-		0, currency, walletId).Scan(&id)
+	tx, err := r.db.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
+	err = r.db.DB.QueryRow(`INSERT INTO account (balance, currency, wallet_id) VALUES ($1, $2, $3) RETURNING id`,
+		0, currency, walletId).Scan(&id)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	tx.Commit()
+	return id, nil
+}
+
+func (r *AccountRepository) Delete(ctx context.Context, currency string, walletId int) (int, error) {
+	var id int
+	tx, err := r.db.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	err = r.db.DB.QueryRow(`DELETE FROM wallet WHERE wallet_id = $1 AND currency = $2 RETURNING id`,
+		walletId, currency).Scan(&id)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	tx.Commit()
 	return id, nil
 }
 

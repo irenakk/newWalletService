@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"walletService/internal/model"
@@ -9,8 +10,10 @@ import (
 )
 
 type InterfaceWalletUsecase interface {
-	CreateWallet(userId int) (int, error)
-	CreateAccount(walletId int, currency string) (int, error)
+	CreateWallet(ctx context.Context, userId int) (int, error)
+	DeleteWallet(ctx context.Context, userId int) error
+	CreateAccount(ctx context.Context, walletId int, currency string) (int, error)
+	DeleteAccount(ctx context.Context, walletId int, currency string) (int, error)
 	Add(username string, currency string, amount int) (model.Account, error)
 	Transfer(username string, currency string, amount int) (model.Account, error)
 }
@@ -27,16 +30,32 @@ func NewWalletUsecase(userService service.UserGrpcService,
 	return &WalletUsecase{userService, walletRepository, accountRepository}
 }
 
-func (usecase WalletUsecase) CreateWallet(userId int) (int, error) {
-	id, err := usecase.walletRepository.Create(userId)
+func (usecase WalletUsecase) CreateWallet(ctx context.Context, userId int) (int, error) {
+	id, err := usecase.walletRepository.Create(ctx, userId)
 	if err != nil {
 		return 0, err
 	}
 	return id, nil
 }
 
-func (usecase WalletUsecase) CreateAccount(walletId int, currency string) (int, error) {
-	id, err := usecase.accountRepository.Create(currency, walletId)
+func (usecase WalletUsecase) DeleteWallet(ctx context.Context, userId int) error {
+	err := usecase.walletRepository.Delete(ctx, userId)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (usecase WalletUsecase) CreateAccount(ctx context.Context, walletId int, currency string) (int, error) {
+	id, err := usecase.accountRepository.Create(ctx, currency, walletId)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (usecase WalletUsecase) DeleteAccount(ctx context.Context, walletId int, currency string) (int, error) {
+	id, err := usecase.accountRepository.Delete(ctx, currency, walletId)
 	if err != nil {
 		return 0, err
 	}
