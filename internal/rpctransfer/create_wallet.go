@@ -6,7 +6,7 @@ import (
 )
 
 func (h *Handlers) CreateWallet(ctx context.Context, in *server.WalletRequest) (*server.WalletResponse, error) {
-	id, err := h.Usecase.CreateWallet(int(in.UserId))
+	id, err := h.Usecase.CreateWallet(ctx, int(in.UserId))
 	if err != nil {
 		return &server.WalletResponse{}, err
 	}
