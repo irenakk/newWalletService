@@ -3,7 +3,11 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/segmentio/kafka-go"
+	"log"
 	"strings"
+	"time"
 	"walletService/internal/model"
 	"walletService/internal/repository"
 	"walletService/internal/service"
@@ -16,18 +20,21 @@ type InterfaceWalletUsecase interface {
 	DeleteAccount(ctx context.Context, walletId int, currency string) (int, error)
 	Add(username string, currency string, amount int) (model.Account, error)
 	Transfer(username string, currency string, amount int) (model.Account, error)
+	Notify(username string, message string) error
 }
 
 type WalletUsecase struct {
 	userService       service.UserGrpcService
 	walletRepository  repository.InterfaceWalletRepository
 	accountRepository repository.InterfaceAccountRepository
+	kafkaWriter       *kafka.Writer
 }
 
 func NewWalletUsecase(userService service.UserGrpcService,
 	walletRepository repository.InterfaceWalletRepository,
-	accountRepository repository.InterfaceAccountRepository) *WalletUsecase {
-	return &WalletUsecase{userService, walletRepository, accountRepository}
+	accountRepository repository.InterfaceAccountRepository,
+	kafkaWriter *kafka.Writer) *WalletUsecase {
+	return &WalletUsecase{userService, walletRepository, accountRepository, kafkaWriter}
 }
 
 func (usecase WalletUsecase) CreateWallet(ctx context.Context, userId int) (int, error) {
@@ -84,6 +91,11 @@ func (usecase WalletUsecase) Add(username string, currency string, amount int) (
 			return model.Account{}, err
 		}
 
+		err = usecase.Notify(username, fmt.Sprintf("Ваш счет %s пополнен на %d", currency, amount))
+		if err != nil {
+			return model.Account{}, err
+		}
+
 		return account, nil
 	}
 
@@ -132,8 +144,38 @@ func (usecase WalletUsecase) Transfer(usernameFrom string, usernameTo string, cu
 			return model.Account{}, err
 		}
 
+		err = usecase.Notify(usernameTo, fmt.Sprintf("Вам перевели %d %s от %s", amount, currency, usernameFrom))
+		if err != nil {
+			return model.Account{}, err
+		}
+		err = usecase.Notify(usernameFrom, fmt.Sprintf("Вы отправили %d %s пользователю %s", amount, currency, usernameTo))
+		if err != nil {
+			return model.Account{}, err
+		}
+
 		return accountFrom, nil
 	}
 
 	return model.Account{}, errors.New("invalid currency")
+}
+
+func (usecase WalletUsecase) Notify(username string, message string) error {
+	messages := []kafka.Message{
+		{Key: []byte(username), Value: []byte(message)},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, msg := range messages {
+		err := usecase.kafkaWriter.WriteMessages(ctx, msg)
+		if err != nil {
+			log.Fatalf("Ошибка записи: %v", err)
+			return err
+		}
+		fmt.Printf("Отправлено: key=%s, value=%s\n", msg.Key, msg.Value)
+	}
+
+	fmt.Println("Все сообщения отправлены!")
+	return nil
 }

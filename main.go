@@ -2,8 +2,10 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/segmentio/kafka-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"time"
 	"walletService/internal/service"
 	"walletService/proto/server"
 
@@ -32,6 +34,15 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 	defer db.DB.Close()
+
+	// Initialize Kafka writer
+	writer := &kafka.Writer{
+		Addr:         kafka.TCP("localhost:9092"),
+		Topic:        "test-topic",
+		Balancer:     &kafka.LeastBytes{},
+		BatchTimeout: 10 * time.Millisecond,
+	}
+	defer writer.Close()
 
 	// Set Gin mode
 	if cfg.Environment == "production" {
@@ -71,7 +82,7 @@ func main() {
 	accountRepository := repository.NewAccountRepository(db)
 
 	// ---- usecase и handler ----
-	walletUsecase := usecase.NewWalletUsecase(*userService, walletRepository, accountRepository)
+	walletUsecase := usecase.NewWalletUsecase(*userService, walletRepository, accountRepository, writer)
 	walletHandler := handler.NewWalletHandler(walletUsecase)
 
 	// Protected routes with JWT middleware
@@ -108,7 +119,7 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 	h := &rpctransfer.Handlers{
-		Usecase: usecase.NewWalletUsecase(*userService, walletRepository, accountRepository),
+		Usecase: usecase.NewWalletUsecase(*userService, walletRepository, accountRepository, writer),
 	}
 	server.RegisterWalletServiceServer(grpcServer, h)
 	reflection.Register(grpcServer)
